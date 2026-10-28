@@ -8,24 +8,81 @@ import storage
 from search import highlight, is_search_active
 
 
-# Nền xanh lá trong suốt nhẹ: đọc được cả giao diện sáng lẫn tối
-FOUND_CSS = """
-<style>
-[class*="st-key-docfound"],
-[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .doc-found-marker),
-[data-testid="stVerticalBlock"]:has(> .element-container .doc-found-marker) {
-    background-color: rgba(34, 197, 94, 0.22);
-    border: 1px solid rgba(34, 197, 94, 0.65);
-    border-radius: 0.75rem;
-    padding: 1rem;
-}
-[class*="st-key-docfound"] mark,
-[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .doc-found-marker) mark,
-[data-testid="stVerticalBlock"]:has(> .element-container .doc-found-marker) mark {
-    color: #1a1a1a;
-}
-</style>
-"""
+# Màu nền tài liệu tìm thấy: cố định, giống nhau ở giao diện Light, Dark và System
+FOUND_BG = "#99FF66"
+FOUND_BORDER = "#5CCC2E"
+FOUND_TEXT = "#1A1A1A"     # chữ tối để đọc rõ trên nền xanh sáng ở mọi giao diện
+FOUND_CONTROL_BG = "#FFFFFF"
+
+# Bộ chọn CSS: bản Streamlit mới (key) và bản cũ (thẻ đánh dấu + :has)
+_FOUND_SELECTORS = [
+    '[class*="st-key-docfound"]',
+    '[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .doc-found-marker)',
+    '[data-testid="stVerticalBlock"]:has(> .element-container .doc-found-marker)',
+]
+
+
+def _css_for(*suffixes: str) -> str:
+    """Ghép mọi bộ chọn với mọi hậu tố, ngăn cách bằng dấu phẩy."""
+    suffixes = suffixes or ("",)
+    return ",\n".join(f"{sel}{suf}" for sel in _FOUND_SELECTORS for suf in suffixes)
+
+
+def _rule(selectors: str, **props: str) -> str:
+    body = "".join(f"    {k.replace('_', '-')}: {v};\n" for k, v in props.items())
+    return f"{selectors} {{\n{body}}}\n"
+
+
+FOUND_CSS = (
+    "<style>\n"
+    # Nền cố định, !important để theme sáng/tối không ghi đè; color-scheme: light
+    # khiến các điều khiển gốc của trình duyệt trong thẻ này luôn dùng kiểu sáng
+    + _rule(
+        _css_for(),
+        background_color=f"{FOUND_BG} !important",
+        border=f"1px solid {FOUND_BORDER}",
+        border_radius="0.75rem",
+        padding="1rem",
+        color_scheme="light",
+    )
+    # Chữ: tiêu đề, tác giả, tag, ghi chú, nhãn ô nhập
+    + _rule(
+        _css_for(
+            ' [data-testid="stMarkdownContainer"]',
+            ' [data-testid="stMarkdownContainer"] *',
+            ' [data-testid="stWidgetLabel"] *',
+        ),
+        color=f"{FOUND_TEXT} !important",
+    )
+    + _rule(
+        _css_for(" code"),
+        background_color="rgba(255, 255, 255, 0.6)",
+        color=FOUND_TEXT,
+    )
+    + _rule(_css_for(" mark"), background_color="#FFD54F", color=FOUND_TEXT)
+    # Nút bấm và ô ghi chú: kiểu sáng giống nhau ở mọi giao diện
+    + _rule(
+        _css_for(" button"),
+        background_color=f"{FOUND_CONTROL_BG} !important",
+        border="1px solid rgba(0, 0, 0, 0.3) !important",
+        color=f"{FOUND_TEXT} !important",
+    )
+    + _rule(
+        _css_for(" textarea", ' [data-baseweb="textarea"]', ' [data-baseweb="base-input"]'),
+        background_color=f"{FOUND_CONTROL_BG} !important",
+        color=f"{FOUND_TEXT} !important",
+    )
+    + _rule(
+        _css_for(' [data-testid="stExpander"] details'),
+        border_color="rgba(0, 0, 0, 0.3) !important",
+    )
+    + _rule(
+        _css_for(' [data-testid="stExpander"] summary svg'),
+        color=f"{FOUND_TEXT} !important",
+        fill=f"{FOUND_TEXT} !important",
+    )
+    + "</style>\n"
+)
 
 
 def _doc_container(doc: dict, found: bool):
