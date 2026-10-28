@@ -49,14 +49,14 @@ FOUND_CSS = (
     "</style>\n"
 )
 # Khung xem trước ảnh/video theo tỉ lệ 3:4 (rộng:cao)
-PREVIEW_WIDTH = 300   # px, chỉnh số này để to/nhỏ hơn
+PREVIEW_WIDTH = 240
 
 PREVIEW_CSS = f"""<style>
 [data-testid="stImage"] img,
 video {{
-    width: {PREVIEW_WIDTH}px;
+    width: {PREVIEW_WIDTH}px !important;
     max-width: 100%;
-    aspect-ratio: 3 / 4;
+     aspect-ratio: 3 / 4 !important;
     object-fit: contain;      /* giữ nguyên hình, thừa thì để nền đen; đổi thành cover nếu muốn cắt lấp đầy khung */
     background: #000;
     border-radius: 0.5rem;
@@ -104,7 +104,7 @@ def _media_kind(file_path, doc: dict) -> Optional[str]:
 
 
 THUMB_SECOND = 1.0   # lấy khung hình ở giây thứ mấy làm ảnh xem trước
-
+THUMB_W, THUMB_H = 240, 320    # ảnh bìa video, tỉ lệ 3:4 (rộng:cao)
 
 def _open_capture(path_str: str):
     """Mở video; nếu cv2 không đọc được đường dẫn Unicode thì chép tạm sang tên ASCII."""
@@ -135,6 +135,18 @@ def _video_thumbnail(path_str: str, mtime: float) -> Optional[bytes]:
             ok, frame = cap.read()
         if not ok:
             return None
+               # Cắt phần giữa theo tỉ lệ 3:4 rồi co về THUMB_W x THUMB_H
+        h, w = frame.shape[:2]
+        if w / h > 3 / 4:                       # khung quá ngang: cắt hai bên
+            new_w = int(h * 3 / 4)
+            x0 = (w - new_w) // 2
+            frame = frame[:, x0:x0 + new_w]
+        else:                                   # khung quá đứng: cắt trên dưới
+            new_h = int(w * 4 / 3)
+            y0 = (h - new_h) // 2
+            frame = frame[y0:y0 + new_h, :]
+        frame = cv2.resize(frame, (THUMB_W, THUMB_H), interpolation=cv2.INTER_AREA)
+
         ok, buf = cv2.imencode(".jpg", frame)
         return buf.tobytes() if ok else None
     finally:
@@ -158,7 +170,7 @@ def _render_video_preview(file_path: Path, doc: dict) -> None:
     if thumb is None:                                     # không cắt được: dùng trình phát luôn
         st.video(str(file_path))
         return
-    st.image(thumb, caption=doc["title"])
+    st.image(thumb, caption=doc["title"], width=THUMB_W)
     if st.button("▶️ Phát video", key=f"play_btn_{doc_id}"):
         st.session_state[play_key] = True
         st.rerun()
