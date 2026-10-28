@@ -1,11 +1,12 @@
-"""Tầng lưu trữ: đọc/ghi metadata JSON và file đính kèm. Không chứa code giao diện."""
+"""Tầng lưu trữ theo từng người dùng. Không chứa code giao diện."""
 import json
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from config import DATA_DIR, INIT_MARKER, META_DIR
+from config import DATA_ROOT, META_ROOT, data_dir, ensure_dirs, meta_dir
 
 
 def _now() -> str:
@@ -17,19 +18,19 @@ def parse_tags(text: str) -> List[str]:
     return list(dict.fromkeys(t.strip() for t in text.split(",") if t.strip()))
 
 
-def save_meta(doc: dict) -> None:
+def save_meta(user: str, doc: dict) -> None:
     """Ghi nguyên tử: ghi file tạm rồi thay thế để tránh hỏng JSON."""
-    path = META_DIR / f"{doc['id']}.json"
+    path = meta_dir(user) / f"{doc['id']}.json"
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=4)
     tmp.replace(path)
 
 
-def load_all_metadata() -> Tuple[List[dict], List[str]]:
-    """Trả về (danh sách tài liệu, danh sách thông báo lỗi)."""
+def load_all_metadata(user: str) -> Tuple[List[dict], List[str]]:
+    """Trả về (danh sách tài liệu của user, danh sách thông báo lỗi)."""
     documents, errors = [], []
-    for path in sorted(META_DIR.glob("*.json")):
+    for path in sorted(meta_dir(user).glob("*.json")):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 doc = json.load(f)
@@ -50,13 +51,13 @@ def load_all_metadata() -> Tuple[List[dict], List[str]]:
 
 
 def create_document(
-    title: str, author: str, tags_text: str, uploaded_file=None
+    user: str, title: str, author: str, tags_text: str, uploaded_file=None
 ) -> dict:
     doc_id = f"doc_{uuid.uuid4().hex[:8]}"
     saved_name = None
     if uploaded_file is not None:
         saved_name = f"{doc_id}_{Path(uploaded_file.name).name}"
-        (DATA_DIR / saved_name).write_bytes(uploaded_file.getbuffer())
+        (data_dir(user) / saved_name).write_bytes(uploaded_file.getbuffer())
 
     doc = {
         "id": doc_id,
@@ -68,26 +69,26 @@ def create_document(
         "file": saved_name,
         "created_at": _now(),
     }
-    save_meta(doc)
+    save_meta(user, doc)
     return doc
 
 
-def update_notes(doc: dict, notes: str) -> None:
+def update_notes(user: str, doc: dict, notes: str) -> None:
     doc["notes"] = notes
-    save_meta(doc)
+    save_meta(user, doc)
 
 
-def delete_doc(doc: dict) -> None:
-    (META_DIR / f"{doc['id']}.json").unlink(missing_ok=True)
+def delete_doc(user: str, doc: dict) -> None:
+    (meta_dir(user) / f"{doc['id']}.json").unlink(missing_ok=True)
     if doc.get("file"):
-        (DATA_DIR / doc["file"]).unlink(missing_ok=True)
+        (data_dir(user) / doc["file"]).unlink(missing_ok=True)
 
 
-def get_file_path(doc: dict) -> Optional[Path]:
+def get_file_path(user: str, doc: dict) -> Optional[Path]:
     """Trả về đường dẫn file đính kèm nếu tồn tại."""
     if not doc.get("file"):
         return None
-    path = DATA_DIR / doc["file"]
+    path = data_dir(user) / doc["file"]
     return path if path.exists() else None
 
 
@@ -96,12 +97,14 @@ def original_filename(doc: dict) -> str:
     return doc["file"].split("_", 2)[-1] if doc.get("file") else ""
 
 
-def init_sample_data() -> None:
-    """Chỉ tạo dữ liệu mẫu đúng một lần."""
-    if INIT_MARKER.exists():
+def init_sample_data(user: str) -> None:
+    """Tạo dữ liệu mẫu đúng một lần cho mỗi người dùng."""
+    marker = meta_dir(user) / ".initialized"
+    if marker.exists():
         return
-    if not any(META_DIR.glob("*.json")):
+    if not any(meta_dir(user).glob("*.json")):
         save_meta(
+            user,
             {
                 "id": "doc_sample",
                 "title": "Lập trình Python cơ bản và nâng cao",
@@ -111,6 +114,20 @@ def init_sample_data() -> None:
                 "notes": "Tài liệu tham khảo chính cho đồ án.",
                 "file": None,
                 "created_at": _now(),
-            }
+            },
         )
-    INIT_MARKER.touch()
+    marker.touch()
+
+
+def migrate_legacy_data(user: str) -> int:
+    """Chuyển dữ liệu cũ (chưa phân người dùng) vào kho của user. Trả về số file đã chuyển."""
+    ensure_dirs(user)
+    moved = 0
+    for path in META_ROOT.glob("*.json"):
+        shutil.move(str(path), str(meta_dir(user) / path.name))
+        moved += 1
+    (META_ROOT / ".initialized").unlink(missing_ok=True)
+    for path in DATA_ROOT.iterdir():
+        if path.is_file():
+            shutil.move(str(path), str(data_dir(user) / path.name))
+    return moved

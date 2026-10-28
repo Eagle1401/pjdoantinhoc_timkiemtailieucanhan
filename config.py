@@ -1,11 +1,23 @@
 """Cấu hình đường dẫn lưu trữ cục bộ (File-based, không dùng Database)."""
 from pathlib import Path
 
-DATA_DIR = Path("raw_documents")
-META_DIR = Path("metadata")
-INIT_MARKER = META_DIR / ".initialized"
+META_ROOT = Path("metadata")        # metadata/<username>/*.json
+DATA_ROOT = Path("raw_documents")   # raw_documents/<username>/<file>
+USERS_DIR = Path("users")
+USERS_FILE = USERS_DIR / "users.json"
 
 
-def ensure_dirs() -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-    META_DIR.mkdir(exist_ok=True)
+def meta_dir(user: str) -> Path:
+    return META_ROOT / user
+
+
+def data_dir(user: str) -> Path:
+    return DATA_ROOT / user
+
+
+def ensure_dirs(user: str = None) -> None:
+    for d in (META_ROOT, DATA_ROOT, USERS_DIR):
+        d.mkdir(exist_ok=True)
+    if user:
+        meta_dir(user).mkdir(exist_ok=True)
+        data_dir(user).mkdir(exist_ok=True)

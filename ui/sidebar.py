@@ -13,7 +13,7 @@ def render_search(all_tags: List[str]) -> Tuple[str, List[str]]:
     return keyword, selected_tags
 
 
-def render_add_form() -> None:
+def render_add_form(user: str) -> None:
     st.sidebar.markdown("---")
     st.sidebar.subheader("➕ Thêm tài liệu mới")
     with st.sidebar.form("add_doc_form", clear_on_submit=True):
@@ -28,12 +28,12 @@ def render_add_form() -> None:
     if not title.strip():
         st.sidebar.warning("Vui lòng nhập tiêu đề tài liệu!")
         return
-    storage.create_document(title, author, tags, uploaded)
+    storage.create_document(user, title, author, tags, uploaded)
     st.toast("Đã lưu tài liệu thành công!", icon="✅")
     st.rerun()
 
 
-def render_sidebar(all_tags: List[str]) -> Tuple[str, List[str]]:
+def render_sidebar(all_tags: List[str], user: str) -> Tuple[str, List[str]]:
     keyword, selected_tags = render_search(all_tags)
-    render_add_form()
+    render_add_form(user)
     return keyword, selected_tags
