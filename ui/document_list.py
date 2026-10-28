@@ -108,7 +108,7 @@ def _render_preview(file_path, doc: dict) -> None:
         if kind == "image":
             st.image(str(file_path), caption=doc["title"], width=PREVIEW_WIDTH)
         else:
-            st.video(str(file_path))
+            st.video(str(file_path),caption=doc["title"], width=PREVIEW_WIDTH)
     except Exception:
         st.caption("⚠️ Không thể xem trước file này, hãy tải về để mở.")
 PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
