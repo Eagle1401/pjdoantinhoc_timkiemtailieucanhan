@@ -97,6 +97,32 @@ def _render_preview(file_path, doc: dict) -> None:
             st.video(str(file_path))
     except Exception:
         st.caption("⚠️ Không thể xem trước file này, hãy tải về để mở.")
+        PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
+
+
+def _human_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
+def _render_download(file_path: Path, doc: dict) -> None:
+    """Chỉ đọc file vào RAM khi người dùng bấm chuẩn bị tải."""
+    doc_id = doc["id"]
+    if st.session_state.get(PREPARED_KEY) == doc_id:
+        st.download_button(
+            "✅ Bấm để lưu file",
+            data=file_path.read_bytes(),          # chỉ đọc cho đúng tài liệu này
+            file_name=storage.original_filename(doc),
+            key=f"dl_{doc_id}",
+        )
+    else:
+        size = _human_size(file_path.stat().st_size)   # stat() không đọc nội dung file
+        if st.button(f"⬇️ Tải file ({size})", key=f"prep_{doc_id}"):
+            st.session_state[PREPARED_KEY] = doc_id
+            st.rerun()
 def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -> None:
     st.markdown(f"### 📄 {highlight(doc['title'], keyword)}", unsafe_allow_html=True)
     st.markdown(
@@ -112,14 +138,8 @@ def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -
         st.markdown(f"> 📝 **Ghi chú cá nhân:** {notes_html}", unsafe_allow_html=True)
     file_path = storage.get_file_path(user, doc)
     if file_path:
-        _render_preview(file_path, doc)          # <-- mới: xem trước ảnh/video
-        st.download_button(
-            "⬇️ Tải file",
-            data=file_path.read_bytes(),
-            file_name=storage.original_filename(doc),
-            key=f"dl_{doc['id']}",
-        )
-
+        _render_preview(file_path, doc)
+        _render_download(file_path, doc)          # <-- thay cho st.download_button cũ
 
 def _render_actions(user: str, doc: dict) -> None:
     with st.expander("📝 Thêm/Sửa ghi chú"):
