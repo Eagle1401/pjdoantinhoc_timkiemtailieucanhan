@@ -106,7 +106,6 @@ def _media_kind(file_path, doc: dict) -> Optional[str]:
 THUMB_SECOND = 1.0   # lấy khung hình ở giây thứ mấy làm ảnh xem trước
 
 
-@st.cache_data(show_spinner=False)
 def _open_capture(path_str: str):
     """Mở video; nếu cv2 không đọc được đường dẫn Unicode thì chép tạm sang tên ASCII."""
     cap = cv2.VideoCapture(path_str)
