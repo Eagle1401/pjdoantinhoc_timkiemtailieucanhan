@@ -110,8 +110,7 @@ def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -
     if doc["notes"]:
         notes_html = highlight(doc["notes"], keyword).replace("\n", "<br>")
         st.markdown(f"> 📝 **Ghi chú cá nhân:** {notes_html}", unsafe_allow_html=True)
-
-        file_path = storage.get_file_path(user, doc)
+    file_path = storage.get_file_path(user, doc)
     if file_path:
         _render_preview(file_path, doc)          # <-- mới: xem trước ảnh/video
         st.download_button(
