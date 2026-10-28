@@ -1,14 +1,18 @@
 """Giao diện danh sách tài liệu, kèm dấu hiệu nhận biết kết quả tìm thấy."""
+import shutil
+import tempfile
+import uuid
 import html
 from typing import List, Optional
-
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import streamlit as st
 
 import storage
 from search import highlight, is_search_active
-import html
 from pathlib import Path
-from typing import List, Optional
 
 # Nền xanh lá #99FF66 trong suốt: hòa vào giao diện Light, Dark hay System
 FOUND_RGB = "153, 255, 102"      # = #99FF66
@@ -99,8 +103,70 @@ def _media_kind(file_path, doc: dict) -> Optional[str]:
     return None
 
 
+THUMB_SECOND = 1.0   # lấy khung hình ở giây thứ mấy làm ảnh xem trước
+
+
+@st.cache_data(show_spinner=False)
+def _open_capture(path_str: str):
+    """Mở video; nếu cv2 không đọc được đường dẫn Unicode thì chép tạm sang tên ASCII."""
+    cap = cv2.VideoCapture(path_str)
+    if cap.isOpened():
+        return cap, None
+    cap.release()
+    tmp = Path(tempfile.gettempdir()) / f"thumb_{uuid.uuid4().hex}{Path(path_str).suffix}"
+    shutil.copyfile(path_str, tmp)
+    return cv2.VideoCapture(str(tmp)), tmp
+
+
+@st.cache_data(show_spinner=False)
+def _video_thumbnail(path_str: str, mtime: float) -> Optional[bytes]:
+    if cv2 is None:
+        return None
+    cap, tmp = _open_capture(path_str)
+    try:
+        if not cap.isOpened():
+            return None
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+        if fps > 0 and frames > fps * THUMB_SECOND:
+            cap.set(cv2.CAP_PROP_POS_MSEC, THUMB_SECOND * 1000)
+        ok, frame = cap.read()
+        if not ok:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, frame = cap.read()
+        if not ok:
+            return None
+        ok, buf = cv2.imencode(".jpg", frame)
+        return buf.tobytes() if ok else None
+    finally:
+        cap.release()
+        if tmp:
+            tmp.unlink(missing_ok=True)
+
+
+def _render_video_preview(file_path: Path, doc: dict) -> None:
+    doc_id = doc["id"]
+    play_key = f"play_{doc_id}"
+
+    if st.session_state.get(play_key):                    # đang phát
+        st.video(str(file_path))
+        if st.button("⏹️ Đóng video", key=f"stop_{doc_id}"):
+            st.session_state[play_key] = False
+            st.rerun()
+        return
+
+    thumb = _video_thumbnail(str(file_path), file_path.stat().st_mtime)
+    if thumb is None:                                     # không cắt được: dùng trình phát luôn
+        st.video(str(file_path))
+        return
+    st.image(thumb, caption=doc["title"])
+    if st.button("▶️ Phát video", key=f"play_btn_{doc_id}"):
+        st.session_state[play_key] = True
+        st.rerun()
+
+
 def _render_preview(file_path, doc: dict) -> None:
-    """Xem trước ảnh bằng st.image, video bằng st.video; loại khác thì bỏ qua."""
+    """Ảnh: st.image. Video: ảnh bìa từ giây đầu, bấm để phát."""
     kind = _media_kind(file_path, doc)
     if kind is None:
         return
@@ -108,9 +174,10 @@ def _render_preview(file_path, doc: dict) -> None:
         if kind == "image":
             st.image(str(file_path), caption=doc["title"], width=PREVIEW_WIDTH)
         else:
-            st.video(str(file_path),caption=doc["title"], width=PREVIEW_WIDTH)
+            _render_video_preview(file_path, doc)
     except Exception:
         st.caption("⚠️ Không thể xem trước file này, hãy tải về để mở.")
+
 PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
 
 
@@ -137,6 +204,8 @@ def _render_download(file_path: Path, doc: dict) -> None:
         if st.button(f"⬇️ Tải file ({size})", key=f"prep_{doc_id}"):
             st.session_state[PREPARED_KEY] = doc_id
             st.rerun()
+
+
 def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -> None:
     st.markdown(f"### 📄 {highlight(doc['title'], keyword)}", unsafe_allow_html=True)
     st.markdown(
@@ -153,7 +222,8 @@ def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -
     file_path = storage.get_file_path(user, doc)
     if file_path:
         _render_preview(file_path, doc)
-        _render_download(file_path, doc)          # <-- thay cho st.download_button cũ
+        _render_download(file_path, doc)     
+
 
 def _render_actions(user: str, doc: dict) -> None:
     with st.expander("📝 Thêm/Sửa ghi chú"):
@@ -191,7 +261,6 @@ def render_document_list(
     selected_tags: Optional[List[str]] = None,
 ) -> None:
     selected_tags = selected_tags or []
-    st.markdown(FOUND_CSS, unsafe_allow_html=True)
     st.markdown(FOUND_CSS + PREVIEW_CSS, unsafe_allow_html=True)
     st.subheader(f"📋 Kho tài liệu ({len(filtered)}/{total} tài liệu)")
 
