@@ -44,6 +44,20 @@ FOUND_CSS = (
     "}\n"
     "</style>\n"
 )
+# Khung xem trước ảnh/video theo tỉ lệ 3:4 (rộng:cao)
+PREVIEW_WIDTH = 300   # px, chỉnh số này để to/nhỏ hơn
+
+PREVIEW_CSS = f"""<style>
+[data-testid="stImage"] img,
+video {{
+    width: {PREVIEW_WIDTH}px;
+    max-width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: contain;      /* giữ nguyên hình, thừa thì để nền đen; đổi thành cover nếu muốn cắt lấp đầy khung */
+    background: #000;
+    border-radius: 0.5rem;
+}}
+</style>"""
 
 
 def _doc_container(doc: dict, found: bool):
@@ -92,12 +106,12 @@ def _render_preview(file_path, doc: dict) -> None:
         return
     try:
         if kind == "image":
-            st.image(str(file_path), caption=doc["title"])
+            st.image(str(file_path), caption=doc["title"], width=PREVIEW_WIDTH)
         else:
             st.video(str(file_path))
     except Exception:
         st.caption("⚠️ Không thể xem trước file này, hãy tải về để mở.")
-        PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
+PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
 
 
 def _human_size(num_bytes: int) -> str:
@@ -178,6 +192,7 @@ def render_document_list(
 ) -> None:
     selected_tags = selected_tags or []
     st.markdown(FOUND_CSS, unsafe_allow_html=True)
+    st.markdown(FOUND_CSS + PREVIEW_CSS, unsafe_allow_html=True)
     st.subheader(f"📋 Kho tài liệu ({len(filtered)}/{total} tài liệu)")
 
     if is_search_active(keyword, selected_tags):
