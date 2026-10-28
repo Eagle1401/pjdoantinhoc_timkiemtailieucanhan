@@ -6,7 +6,9 @@ import streamlit as st
 
 import storage
 from search import highlight, is_search_active
-
+import html
+from pathlib import Path
+from typing import List, Optional
 
 # Nền xanh lá #99FF66 trong suốt: hòa vào giao diện Light, Dark hay System
 FOUND_RGB = "153, 255, 102"      # = #99FF66
@@ -65,7 +67,36 @@ def _tag_html(tag: str, keyword: str, selected_tags: List[str]) -> str:
         inner = highlight(tag, keyword)
     return f"<code>{inner}</code>"
 
+# Định dạng được xem trước trực tiếp trong thẻ tài liệu
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+VIDEO_EXTS = {".mp4", ".webm", ".ogv", ".mov", ".m4v"}
 
+
+def _media_kind(file_path, doc: dict) -> Optional[str]:
+    """Trả về 'image', 'video' hoặc None, dựa vào đuôi file (lưu trữ hoặc tên gốc)."""
+    exts = {
+        file_path.suffix.lower(),
+        Path(storage.original_filename(doc)).suffix.lower(),
+    }
+    if exts & IMAGE_EXTS:
+        return "image"
+    if exts & VIDEO_EXTS:
+        return "video"
+    return None
+
+
+def _render_preview(file_path, doc: dict) -> None:
+    """Xem trước ảnh bằng st.image, video bằng st.video; loại khác thì bỏ qua."""
+    kind = _media_kind(file_path, doc)
+    if kind is None:
+        return
+    try:
+        if kind == "image":
+            st.image(str(file_path), caption=doc["title"])
+        else:
+            st.video(str(file_path))
+    except Exception:
+        st.caption("⚠️ Không thể xem trước file này, hãy tải về để mở.")
 def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -> None:
     st.markdown(f"### 📄 {highlight(doc['title'], keyword)}", unsafe_allow_html=True)
     st.markdown(
@@ -80,8 +111,9 @@ def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -
         notes_html = highlight(doc["notes"], keyword).replace("\n", "<br>")
         st.markdown(f"> 📝 **Ghi chú cá nhân:** {notes_html}", unsafe_allow_html=True)
 
-    file_path = storage.get_file_path(user, doc)
+        file_path = storage.get_file_path(user, doc)
     if file_path:
+        _render_preview(file_path, doc)          # <-- mới: xem trước ảnh/video
         st.download_button(
             "⬇️ Tải file",
             data=file_path.read_bytes(),
