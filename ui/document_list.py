@@ -5,7 +5,41 @@ from typing import List, Optional
 import streamlit as st
 
 import storage
-from search import highlight, is_search_active, matched_fields
+from search import highlight, is_search_active
+
+
+# Nền xanh lá trong suốt nhẹ: đọc được cả giao diện sáng lẫn tối
+FOUND_CSS = """
+<style>
+[class*="st-key-docfound"],
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .doc-found-marker),
+[data-testid="stVerticalBlock"]:has(> .element-container .doc-found-marker) {
+    background-color: rgba(34, 197, 94, 0.22);
+    border: 1px solid rgba(34, 197, 94, 0.65);
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+[class*="st-key-docfound"] mark,
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .doc-found-marker) mark,
+[data-testid="stVerticalBlock"]:has(> .element-container .doc-found-marker) mark {
+    color: #1a1a1a;
+}
+</style>
+"""
+
+
+def _doc_container(doc: dict, found: bool):
+    """Container của một tài liệu; nếu 'found' thì có nền xanh lá."""
+    if not found:
+        return st.container()
+    try:
+        # Streamlit mới: key tạo ra class CSS 'st-key-<key>' để gắn style ổn định
+        return st.container(key=f"docfound-{doc['id']}")
+    except TypeError:
+        # Streamlit cũ không có tham số key: dùng thẻ đánh dấu + CSS :has()
+        container = st.container()
+        container.markdown('<span class="doc-found-marker"></span>', unsafe_allow_html=True)
+        return container
 
 
 def _tag_html(tag: str, keyword: str, selected_tags: List[str]) -> str:
@@ -17,11 +51,6 @@ def _tag_html(tag: str, keyword: str, selected_tags: List[str]) -> str:
 
 
 def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -> None:
-    if is_search_active(keyword, selected_tags):
-        fields = matched_fields(doc, keyword, selected_tags)
-        if fields:
-            st.markdown(f":green[✅ **Đã tìm thấy** — khớp ở: {', '.join(fields)}]")
-
     st.markdown(f"### 📄 {highlight(doc['title'], keyword)}", unsafe_allow_html=True)
     st.markdown(
         f"**Tác giả:** {highlight(doc['author'], keyword)} | "
@@ -64,7 +93,7 @@ def _render_actions(user: str, doc: dict) -> None:
 def render_document(
     user: str, doc: dict, keyword: str = "", selected_tags: Optional[List[str]] = None
 ) -> None:
-    with st.container():
+    with _doc_container(doc, is_search_active(keyword, selected_tags)):
         col_info, col_actions = st.columns([3, 1])
         with col_info:
             _render_info(user, doc, keyword, selected_tags or [])
@@ -81,6 +110,7 @@ def render_document_list(
     selected_tags: Optional[List[str]] = None,
 ) -> None:
     selected_tags = selected_tags or []
+    st.markdown(FOUND_CSS, unsafe_allow_html=True)
     st.subheader(f"📋 Kho tài liệu ({len(filtered)}/{total} tài liệu)")
 
     if is_search_active(keyword, selected_tags):
