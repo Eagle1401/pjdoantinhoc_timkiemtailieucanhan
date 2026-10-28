@@ -33,7 +33,9 @@ def main() -> None:
     render_user_box(user)
     keyword, selected_tags = render_sidebar(get_all_tags(docs), user)
     filtered = filter_documents(docs, keyword, selected_tags)
-    render_document_list(user, filtered, total=len(docs))
+    render_document_list(
+        user, filtered, total=len(docs), keyword=keyword, selected_tags=selected_tags
+    )
 
 
 main()
