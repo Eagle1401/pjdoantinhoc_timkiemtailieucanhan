@@ -1,8 +1,8 @@
 """Giao diện đăng nhập, đăng ký và đăng xuất."""
 from typing import Optional
-from ui.session import forget_login, remember_login, restore_login
+
 import streamlit as st
-import time
+
 import auth
 import storage
 from config import ensure_dirs
@@ -11,20 +11,13 @@ SESSION_KEY = "user"
 
 
 def current_user() -> Optional[str]:
-    user = st.session_state.get(SESSION_KEY)
-    if user:
-        return user
-    user = restore_login()                 # tải lại trang: thử đọc từ cookie
-    if user:
-        st.session_state[SESSION_KEY] = user
-    return user
+    return st.session_state.get(SESSION_KEY)
 
 
 def _login(username: str) -> None:
     st.session_state[SESSION_KEY] = username
-    remember_login(username)
-    time.sleep(0.5)                        # cho cookie kịp ghi xuống trình duyệt
     st.rerun()
+
 
 def _render_login_tab() -> None:
     with st.form("login_form"):
@@ -73,7 +66,6 @@ def render_login_page() -> None:
 def render_user_box(user: str) -> None:
     st.sidebar.markdown(f"👤 Xin chào, **{user}**")
     if st.sidebar.button("Đăng xuất", use_container_width=True):
-        forget_login()                     # xóa token trên server và cookie
         st.session_state.pop(SESSION_KEY, None)
         st.rerun()
     st.sidebar.markdown("---")
