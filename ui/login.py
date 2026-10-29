@@ -1,8 +1,9 @@
 """Giao diện đăng nhập, đăng ký, đăng xuất và ghi nhớ đăng nhập."""
 from typing import Optional
-
+from ui.avatar import render_user_avatar
 import streamlit as st
-
+import hashlib
+import html
 import auth
 import storage
 from config import ensure_dirs
@@ -66,7 +67,7 @@ def render_login_page() -> None:
 
 
 def render_user_box(user: str) -> None:
-    st.sidebar.markdown(f"👤 Xin chào, **{user}**")
+    render_user_avatar(user)
     if st.sidebar.button("Đăng xuất", use_container_width=True):
         forget_login()
         st.session_state.pop(SESSION_KEY, None)
