@@ -1,6 +1,6 @@
 """Điểm vào của ứng dụng. Chạy: streamlit run app.py"""
 import streamlit as st
-
+from ui.login import current_user, render_login_page, render_user_box
 import storage
 from config import ensure_dirs
 from search import filter_documents, get_all_tags
@@ -19,12 +19,10 @@ st.set_page_config(
 
 
 def main() -> None: 
-    flush_cookie_actions()            # ghi/xóa cookie đăng nhập nếu có yêu cầu từ lần chạy trước
     user = current_user()             # lấy từ session hoặc khôi phục từ cookie
     if not user:                      # chưa đăng nhập -> chỉ hiện trang đăng nhập
         render_login_page()
         return
-
     ensure_dirs(user)
     storage.init_sample_data(user)
 
@@ -42,5 +40,6 @@ def main() -> None:
     render_document_list(
         user, filtered, total=len(docs), keyword=keyword, selected_tags=selected_tags
     )
+
 
 main()
