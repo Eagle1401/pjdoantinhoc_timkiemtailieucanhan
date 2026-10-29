@@ -1,10 +1,12 @@
 """Giao diện danh sách tài liệu, kèm dấu hiệu nhận biết kết quả tìm thấy."""
 import html
+from pathlib import Path
 from typing import List, Optional
 
 import streamlit as st
 
 import storage
+import thumbs
 from search import highlight, is_search_active
 
 
@@ -43,6 +45,14 @@ FOUND_CSS = (
     "</style>\n"
 )
 
+# Không ép tỉ lệ bằng CSS: kích thước 3:4 / 4:3 đã được cố định trong ảnh xem trước
+PREVIEW_CSS = """<style>
+video { max-width: 520px; border-radius: 0.5rem; }
+[data-testid="stImage"] img { border-radius: 0.5rem; }
+</style>"""
+
+PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
+
 
 def _doc_container(doc: dict, found: bool):
     """Container của một tài liệu; nếu 'found' thì có nền xanh lá."""
@@ -66,6 +76,76 @@ def _tag_html(tag: str, keyword: str, selected_tags: List[str]) -> str:
     return f"<code>{inner}</code>"
 
 
+def _human_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
+def _toggle_button(label_on: str, label_off: str, state_key: str, btn_key: str) -> bool:
+    """Nút bật/tắt lưu trong session_state; trả về trạng thái hiện tại."""
+    on = st.session_state.get(state_key, False)
+    if st.button(label_off if on else label_on, key=btn_key):
+        st.session_state[state_key] = not on
+        st.rerun()
+    return on
+
+
+def _render_preview(user: str, file_path: Path, doc: dict) -> None:
+    """Ảnh: ảnh xem trước 3:4/4:3, bấm để xem ảnh lớn. Video: ảnh bìa giây đầu, bấm để phát."""
+    kind = thumbs.kind_of(storage.original_filename(doc))
+    if kind is None:
+        return
+    try:
+        thumb = storage.ensure_thumbnail(user, doc)    # tài liệu cũ chưa có thì tạo một lần
+        width = thumbs.size_for(doc.get("orientation"))[0]
+        doc_id = doc["id"]
+
+        if kind == "image":
+            if _toggle_button("🔍 Xem ảnh lớn", "✖️ Thu nhỏ", f"big_{doc_id}", f"bigbtn_{doc_id}"):
+                st.image(str(file_path), caption=doc["title"])
+            elif thumb:
+                st.image(str(thumb), caption=doc["title"], width=width)
+            else:
+                st.image(str(file_path), caption=doc["title"], width=width)
+            return
+
+        # Video
+        if st.session_state.get(f"play_{doc_id}"):
+            st.video(str(file_path))
+            if st.button("⏹️ Đóng video", key=f"stop_{doc_id}"):
+                st.session_state[f"play_{doc_id}"] = False
+                st.rerun()
+        elif thumb:
+            st.image(str(thumb), caption=doc["title"], width=width)
+            if st.button("▶️ Phát video", key=f"play_btn_{doc_id}"):
+                st.session_state[f"play_{doc_id}"] = True
+                st.rerun()
+        else:
+            st.video(str(file_path))                   # không tạo được ảnh bìa: dùng trình phát luôn
+    except Exception as e:
+        st.caption(f"⚠️ Không thể xem trước file này ({type(e).__name__}: {e})")
+
+
+def _render_download(file_path: Path, doc: dict) -> None:
+    """Chỉ đọc file vào RAM khi người dùng bấm chuẩn bị tải."""
+    doc_id = doc["id"]
+    if st.session_state.get(PREPARED_KEY) == doc_id:
+        st.download_button(
+            "✅ Bấm để lưu file",
+            data=file_path.read_bytes(),               # chỉ đọc cho đúng tài liệu này
+            file_name=storage.original_filename(doc),
+            key=f"dl_{doc_id}",
+        )
+    else:
+        size = _human_size(file_path.stat().st_size)   # stat() không đọc nội dung file
+        if st.button(f"⬇️ Tải file ({size})", key=f"prep_{doc_id}"):
+            st.session_state[PREPARED_KEY] = doc_id
+            st.rerun()
+
+
 def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -> None:
     st.markdown(f"### 📄 {highlight(doc['title'], keyword)}", unsafe_allow_html=True)
     st.markdown(
@@ -82,12 +162,8 @@ def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -
 
     file_path = storage.get_file_path(user, doc)
     if file_path:
-        st.download_button(
-            "⬇️ Tải file",
-            data=file_path.read_bytes(),
-            file_name=storage.original_filename(doc),
-            key=f"dl_{doc['id']}",
-        )
+        _render_preview(user, file_path, doc)
+        _render_download(file_path, doc)
 
 
 def _render_actions(user: str, doc: dict) -> None:
@@ -126,7 +202,7 @@ def render_document_list(
     selected_tags: Optional[List[str]] = None,
 ) -> None:
     selected_tags = selected_tags or []
-    st.markdown(FOUND_CSS, unsafe_allow_html=True)
+    st.markdown(FOUND_CSS + PREVIEW_CSS, unsafe_allow_html=True)
     st.subheader(f"📋 Kho tài liệu ({len(filtered)}/{total} tài liệu)")
 
     if is_search_active(keyword, selected_tags):

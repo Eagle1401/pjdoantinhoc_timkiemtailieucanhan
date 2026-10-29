@@ -2,12 +2,14 @@
 import json
 import shutil
 import uuid
+
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from config import DATA_ROOT, META_ROOT, data_dir, ensure_dirs, meta_dir
 
+from config import DATA_ROOT, META_ROOT, data_dir, ensure_dirs, meta_dir
+import thumbs
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -45,6 +47,8 @@ def load_all_metadata(user: str) -> Tuple[List[dict], List[str]]:
         doc.setdefault("notes", "")
         doc.setdefault("file", None)
         doc.setdefault("created_at", "")
+        doc.setdefault("thumb", None)          # None = chưa thử tạo; "" = đã thử nhưng không tạo được
+        doc.setdefault("orientation", None)
         documents.append(doc)
     documents.sort(key=lambda d: d["created_at"], reverse=True)
     return documents, errors
@@ -54,10 +58,16 @@ def create_document(
     user: str, title: str, author: str, tags_text: str, uploaded_file=None
 ) -> dict:
     doc_id = f"doc_{uuid.uuid4().hex[:8]}"
-    saved_name = None
+    saved_name = thumb_name = orientation = None
     if uploaded_file is not None:
         saved_name = f"{doc_id}_{Path(uploaded_file.name).name}"
-        (data_dir(user) / saved_name).write_bytes(uploaded_file.getbuffer())
+        file_path = data_dir(user) / saved_name
+        file_path.write_bytes(uploaded_file.getbuffer())
+        result = thumbs.make_thumbnail(file_path)
+        if result:
+            jpg, orientation = result
+            thumb_name = f"{doc_id}_thumb.jpg"
+            (data_dir(user) / thumb_name).write_bytes(jpg)
 
     doc = {
         "id": doc_id,
@@ -67,6 +77,8 @@ def create_document(
         "tags": parse_tags(tags_text),
         "notes": "",
         "file": saved_name,
+        "thumb": thumb_name,
+        "orientation": orientation,
         "created_at": _now(),
     }
     save_meta(user, doc)
@@ -82,6 +94,8 @@ def delete_doc(user: str, doc: dict) -> None:
     (meta_dir(user) / f"{doc['id']}.json").unlink(missing_ok=True)
     if doc.get("file"):
         (data_dir(user) / doc["file"]).unlink(missing_ok=True)
+    if doc.get("thumb"):
+        (data_dir(user) / doc["thumb"]).unlink(missing_ok=True)
 
 
 def get_file_path(user: str, doc: dict) -> Optional[Path]:
@@ -131,3 +145,31 @@ def migrate_legacy_data(user: str) -> int:
         if path.is_file():
             shutil.move(str(path), str(data_dir(user) / path.name))
     return moved
+
+
+def get_thumb_path(user: str, doc: dict) -> Optional[Path]:
+    if not doc.get("thumb"):
+        return None
+    path = data_dir(user) / doc["thumb"]
+    return path if path.exists() else None
+
+
+def ensure_thumbnail(user: str, doc: dict) -> Optional[Path]:
+    """Trả về đường dẫn ảnh xem trước; tài liệu cũ chưa có thì tạo một lần rồi lưu lại."""
+    path = get_thumb_path(user, doc)
+    if path or doc.get("thumb") == "":              # đã có, hoặc đã thử mà không tạo được
+        return path
+    file_path = get_file_path(user, doc)
+    if not file_path or thumbs.kind_of(file_path.name) is None:
+        return None
+    if thumbs.kind_of(file_path.name) == "video" and thumbs.cv2 is None:
+        return None                                  # chưa cài OpenCV: để lần sau thử lại
+    result = thumbs.make_thumbnail(file_path)
+    if result:
+        jpg, doc["orientation"] = result
+        doc["thumb"] = f"{doc['id']}_thumb.jpg"
+        (data_dir(user) / doc["thumb"]).write_bytes(jpg)
+    else:
+        doc["thumb"] = ""
+    save_meta(user, doc)
+    return get_thumb_path(user, doc)
