@@ -52,21 +52,33 @@ def _logout() -> None:
 
 
 def flush_cookie_actions() -> None:
-    """Chạy một đoạn JS nhỏ để ghi hoặc xóa cookie trên trình duyệt (nếu có yêu cầu)."""
+    """Ghi/xóa cookie bằng JS (bản debug: hiện kết quả ghi cookie trên trang)."""
     action = st.session_state.pop(COOKIE_ACTION_KEY, None)
     if not action:
         return
     kind, token = action
     value, max_age = (token, auth.SESSION_DAYS * 86400) if kind == "set" else ("", 0)
-    # token chỉ gồm ký tự A-Z a-z 0-9 - _ nên chèn thẳng vào chuỗi JS là an toàn
-    components.html(
-        f"""<script>
-        const p = window.parent;
-        const secure = p.location.protocol === 'https:' ? '; Secure' : '';
-        p.document.cookie = "{COOKIE_NAME}={value}; max-age={max_age}; path=/; SameSite=Lax" + secure;
-        </script>""",
-        height=0,
-    )
+    cookie = f"{COOKIE_NAME}={value}; max-age={max_age}; path=/; SameSite=Lax"
+    script = """
+    <body style="font:12px sans-serif;background:#fff;color:#000;margin:0;padding:4px"></body>
+    <script>
+    const base = "__COOKIE__";
+    const log = [];
+    function tryWrite(label, w) {
+        try {
+            const secure = w.location.protocol === 'https:' ? '; Secure' : '';
+            w.document.cookie = base + secure;
+            log.push(label + ': ' + (w.document.cookie.includes('__NAME__=') ? 'GHI ĐƯỢC' : 'ghi nhưng không đọc lại được'));
+        } catch (e) {
+            log.push(label + ': LỖI ' + e.name);
+        }
+    }
+    tryWrite('parent', window.parent);
+    tryWrite('iframe', window);
+    document.body.innerText = 'Ghi cookie -> ' + log.join(' | ');
+    </script>
+    """.replace("__COOKIE__", cookie).replace("__NAME__", COOKIE_NAME)
+    components.html(script, height=50)
 
 
 # ---------------------------------------------------------------------------
