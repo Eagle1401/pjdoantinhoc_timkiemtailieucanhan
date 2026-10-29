@@ -55,6 +55,8 @@ def debug_panel() -> None:
             cookies = dict(st.context.cookies)
             st.write("Các cookie server nhận được:", list(cookies.keys()))
             st.write("Có cookie doc_session:", "doc_session" in cookies)
+            import auth 
+            st.write("Token hợp lệ cho user:", auth.get_user_from_token(cookies.get("doc_session")))
         except Exception as e:
             st.write("Không đọc được cookie:", repr(e))
         try:
@@ -62,4 +64,5 @@ def debug_panel() -> None:
         except Exception:
             n = -1
         st.write("Số phiên lưu trong sessions.json:", n)
+
 main()
