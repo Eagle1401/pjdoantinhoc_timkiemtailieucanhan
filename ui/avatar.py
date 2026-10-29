@@ -4,7 +4,7 @@ import hashlib
 import io
 from pathlib import Path
 from typing import Optional
-
+import html
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -118,8 +118,20 @@ def _render_change_form(user: str) -> None:
             st.rerun()
 
 
+ENLARGED_PX = 220            # kích thước avatar khi phóng to
+
+
+def _render_enlarged(user: str) -> None:
+    """Nội dung hiện ra khi nhấp: avatar lớn ở giữa và tên người dùng."""
+    _, center, _ = st.columns([1, 3, 1])
+    with center:
+        st.image(avatar_image(user), width=ENLARGED_PX)
+    st.markdown(f"<div style='text-align:center'><b>{html.escape(user)}</b></div>",
+                unsafe_allow_html=True)
+
+
 def render_user_avatar(user: str) -> None:
-    """Avatar tròn kèm tên người dùng bên cạnh, và mục đổi ảnh đại diện."""
+    """Avatar tròn kèm tên bên cạnh; nhấp vào tên để xem avatar phóng to, và mục đổi ảnh."""
     with st.sidebar:
         try:
             col_img, col_name = st.columns([1, 4], vertical_alignment="center")
@@ -128,5 +140,9 @@ def render_user_avatar(user: str) -> None:
         with col_img:
             st.image(avatar_image(user), width=AVATAR_PX)
         with col_name:
-            st.markdown(f"**{user}**")
+            try:
+                with st.popover(user, use_container_width=True):
+                    _render_enlarged(user)
+            except AttributeError:            # Streamlit cũ không có st.popover
+                st.markdown(f"**{user}**")
     _render_change_form(user)
