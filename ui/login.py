@@ -94,12 +94,11 @@ def _render_login_tab() -> None:
     with st.form("login_form"):
         username = st.text_input("Tên đăng nhập")
         password = st.text_input("Mật khẩu", type="password")
-        remember = st.checkbox(f"Ghi nhớ đăng nhập ({auth.SESSION_DAYS} ngày)", value=True)
         submitted = st.form_submit_button("Đăng nhập", use_container_width=True)
     if submitted:
         user = auth.authenticate(username, password)
         if user:
-            _login(user, remember)
+            _login(user)                   # không còn tham số remember
         else:
             st.error("Sai tên đăng nhập hoặc mật khẩu.")
 
