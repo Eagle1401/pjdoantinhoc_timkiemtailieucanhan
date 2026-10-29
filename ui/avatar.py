@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from config import data_dir
 
-AVATAR_RADIUS_CM = 0.5                        # bán kính; đường kính = 1 cm
+AVATAR_RADIUS_CM = 2.0                        # bán kính; đường kính = 1 cm
 PX_PER_CM = 96 / 2.54                         # ~37,8 px/cm ở độ phân giải chuẩn của trình duyệt
 AVATAR_PX = round(AVATAR_RADIUS_CM * 2 * PX_PER_CM)   # ~38 px khi hiển thị
 RENDER_PX = 256                               # kích thước ảnh lưu/vẽ, thu nhỏ khi hiển thị
@@ -131,40 +131,24 @@ def _render_profile(user: str) -> None:
     st.divider()
     _render_change_form(user)
 
-AVATAR_KEY = "user_avatar"       # tạo class CSS st-key-user_avatar để gắn style ổn định
-
-
-def _avatar_css(user: str) -> str:
-    """CSS biến nút popover thành hình tròn mang ảnh avatar (nhúng ảnh dạng data URI)."""
-    b64 = base64.b64encode(avatar_image(user)).decode()
-    d = AVATAR_RADIUS_CM * 2
-    btn = f'.st-key-{AVATAR_KEY} [data-testid="stPopoverButton"]'
-    return f"""<style>
-{btn} {{
-    width: {d}cm; height: {d}cm; min-height: 0; padding: 0;
-    border-radius: 50%; overflow: hidden;
-    border: 1px solid rgba(128, 128, 128, 0.5);
-    background: url(data:image/png;base64,{b64}) center / cover no-repeat;
-    font-size: 0; color: transparent;
-}}
-{btn} * {{ display: none; }}                  /* ẩn nhãn và mũi tên mặc định */
-{btn}:hover {{ filter: brightness(1.15); border-color: #888; }}
-</style>"""
 
 
 AVATAR_KEY = "user_avatar"       # tạo class CSS st-key-user_avatar để gắn style ổn định
 
 
 def _avatar_css(user: str) -> str:
-    """CSS biến nút popover thành hình tròn mang ảnh avatar (nhúng ảnh dạng data URI)."""
+    """CSS biến nút popover thành hình tròn mang ảnh avatar, căn giữa thanh bên."""
     b64 = base64.b64encode(avatar_image(user)).decode()
     d = AVATAR_RADIUS_CM * 2
-    btn = f'.st-key-{AVATAR_KEY} [data-testid="stPopoverButton"]'
+    root = f".st-key-{AVATAR_KEY}"
+    btn = f'{root} [data-testid="stPopoverButton"]'
     return f"""<style>
+{root} {{ align-items: center; }}             /* căn giữa theo chiều ngang */
+{root} [data-testid="stPopover"] {{ width: auto; margin: 0 auto; }}
 {btn} {{
     width: {d}cm; height: {d}cm; min-height: 0; padding: 0;
     border-radius: 50%; overflow: hidden;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 2px solid rgba(128, 128, 128, 0.5);
     background: url(data:image/png;base64,{b64}) center / cover no-repeat;
     font-size: 0; color: transparent;
 }}
@@ -174,20 +158,19 @@ def _avatar_css(user: str) -> str:
 
 
 def render_user_avatar(user: str) -> None:
-    """Chỉ hiện avatar tròn; nhấp vào avatar để xem thông tin và đổi ảnh."""
+    """Avatar tròn ở giữa thanh bên; nhấp vào avatar để xem thông tin và đổi ảnh."""
     with st.sidebar:
         try:
             box = st.container(key=AVATAR_KEY)
         except TypeError:                     # Streamlit cũ không hỗ trợ key cho container
             box = None
-        if box is None:                       # phương án dự phòng: nút ▾ cạnh avatar
-            col_img, col_btn = st.columns([1, 5])
-            col_img.image(avatar_image(user), width=AVATAR_PX)
-            with col_btn:
-                with st.popover("▾"):
-                    _render_profile(user)
+        if box is None:                       # phương án dự phòng: avatar ở giữa, nút ▾ bên dưới
+            _, mid, _ = st.columns([1, 2, 1])
+            mid.image(avatar_image(user), width=AVATAR_PX)
+            with st.popover("▾", use_container_width=True):
+                _render_profile(user)
             return
         st.markdown(_avatar_css(user), unsafe_allow_html=True)
         with box:
-            with st.popover("👤"):            # nhãn bị CSS ẩn; nếu CSS không áp dụng thì hiện 👤
+            with st.popover("👤"):            # nhãn bị CSS ẩn
                 _render_profile(user)
