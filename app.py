@@ -43,25 +43,4 @@ def main() -> None:
         user, filtered, total=len(docs), keyword=keyword, selected_tags=selected_tags
     )
 
-def debug_panel() -> None:
-    """TẠM THỜI: dùng để tìm lý do không nhớ đăng nhập. Xóa sau khi kiểm tra xong."""
-    from config import SESSIONS_FILE
-    import json
-
-    with st.sidebar.expander("🛠 Debug đăng nhập", expanded=True):
-        st.write("Phiên bản Streamlit:", st.__version__)
-        try:
-            cookies = dict(st.context.cookies)
-            st.write("Các cookie server nhận được:", list(cookies.keys()))
-            st.write("Có cookie doc_session:", "doc_session" in cookies)
-            import auth 
-            st.write("Token hợp lệ cho user:", auth.get_user_from_token(cookies.get("doc_session")))
-        except Exception as e:
-            st.write("Không đọc được cookie:", repr(e))
-        try:
-            n = len(json.loads(SESSIONS_FILE.read_text())) if SESSIONS_FILE.exists() else 0
-        except Exception:
-            n = -1
-        st.write("Số phiên lưu trong sessions.json:", n)
-
 main()
