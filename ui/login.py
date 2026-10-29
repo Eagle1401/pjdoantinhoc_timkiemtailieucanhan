@@ -1,9 +1,9 @@
 """Giao diện đăng nhập, đăng ký, đăng xuất và ghi nhớ đăng nhập bằng cookie."""
 from typing import Optional
-
+import time
 import streamlit as st
 import streamlit.components.v1 as components
-
+from ui.session import forget_login, remember_login, restore_login
 import auth
 import storage
 from config import ensure_dirs
@@ -47,18 +47,20 @@ def _restore_from_cookie() -> Optional[str]:
 
 
 def current_user() -> Optional[str]:
-    return st.session_state.get(SESSION_KEY) or _restore_from_cookie()
+    user = st.session_state.get(SESSION_KEY)
+    if user:
+        return user
+    user = restore_login()                 # tải lại trang: thử đọc từ cookie
+    if user:
+        st.session_state[SESSION_KEY] = user
+    return user
 
 
-def _login(username: str, remember: bool) -> None:
+def _login(username: str) -> None:
     st.session_state[SESSION_KEY] = username
-    if remember:
-        token = auth.create_session(username)
-        st.session_state[TOKEN_KEY] = token
-        # Cookie được ghi ở lần chạy kế tiếp, vì st.rerun() ngay bây giờ sẽ hủy script JS
-        st.session_state[COOKIE_ACTION_KEY] = ("set", token)
+    remember_login(username)
+    time.sleep(0.5)                        # cho cookie kịp ghi xuống trình duyệt
     st.rerun()
-
 
 def _logout() -> None:
     auth.delete_session(st.session_state.pop(TOKEN_KEY, None))   # vô hiệu hóa token ở server
@@ -136,5 +138,6 @@ def render_login_page() -> None:
 def render_user_box(user: str) -> None:
     st.sidebar.markdown(f"👤 Xin chào, **{user}**")
     if st.sidebar.button("Đăng xuất", use_container_width=True):
-        _logout()
-    st.sidebar.markdown("---")
+        forget_login()                     # xóa token trên server và cookie
+        st.session_state.pop(SESSION_KEY, None)
+        st.rerun()
