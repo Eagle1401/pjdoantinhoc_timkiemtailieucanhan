@@ -18,8 +18,7 @@ st.set_page_config(
 )
 
 
-def main() -> None:
-    debug_panel()   
+def main() -> None: 
     flush_cookie_actions()            # ghi/xóa cookie đăng nhập nếu có yêu cầu từ lần chạy trước
     user = current_user()             # lấy từ session hoặc khôi phục từ cookie
     if not user:                      # chưa đăng nhập -> chỉ hiện trang đăng nhập

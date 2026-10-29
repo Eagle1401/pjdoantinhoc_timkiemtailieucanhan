@@ -17,12 +17,28 @@ COOKIE_NAME = "doc_session"
 # ---------------------------------------------------------------------------
 # Trạng thái đăng nhập
 # ---------------------------------------------------------------------------
+def _read_token() -> Optional[str]:
+    """Đọc token từ cookie: thử phía server trước, rồi đến phía trình duyệt."""
+    # 1) Phía server: chạy tốt khi chạy trên máy cá nhân
+    try:
+        token = st.context.cookies.get(COOKIE_NAME)
+    except Exception:
+        token = None
+    if token:
+        return token
+
+    # 2) Phía trình duyệt: cần thiết trên Streamlit Cloud vì cookie bị lọc ở server.
+    #    Lần chạy đầu trả về None, đọc xong component tự kích hoạt chạy lại trang.
+    try:
+        import extra_streamlit_components as stx
+    except ImportError:
+        return None
+    return stx.CookieManager(key="cookie_reader").get(COOKIE_NAME)
+
+
 def _restore_from_cookie() -> Optional[str]:
     """Khôi phục đăng nhập từ cookie (khi tải lại trang, session_state đã mất)."""
-    try:
-        token = st.context.cookies.get(COOKIE_NAME)   # cần Streamlit >= 1.37
-    except Exception:
-        return None
+    token = _read_token()
     user = auth.get_user_from_token(token)
     if user:
         st.session_state[SESSION_KEY] = user
@@ -52,33 +68,21 @@ def _logout() -> None:
 
 
 def flush_cookie_actions() -> None:
-    """Ghi/xóa cookie bằng JS (bản debug: hiện kết quả ghi cookie trên trang)."""
+    """Chạy một đoạn JS nhỏ để ghi hoặc xóa cookie trên trình duyệt (nếu có yêu cầu)."""
     action = st.session_state.pop(COOKIE_ACTION_KEY, None)
     if not action:
         return
     kind, token = action
     value, max_age = (token, auth.SESSION_DAYS * 86400) if kind == "set" else ("", 0)
-    cookie = f"{COOKIE_NAME}={value}; max-age={max_age}; path=/; SameSite=Lax"
-    script = """
-    <body style="font:12px sans-serif;background:#fff;color:#000;margin:0;padding:4px"></body>
-    <script>
-    const base = "__COOKIE__";
-    const log = [];
-    function tryWrite(label, w) {
-        try {
-            const secure = w.location.protocol === 'https:' ? '; Secure' : '';
-            w.document.cookie = base + secure;
-            log.push(label + ': ' + (w.document.cookie.includes('__NAME__=') ? 'GHI ĐƯỢC' : 'ghi nhưng không đọc lại được'));
-        } catch (e) {
-            log.push(label + ': LỖI ' + e.name);
-        }
-    }
-    tryWrite('parent', window.parent);
-    tryWrite('iframe', window);
-    document.body.innerText = 'Ghi cookie -> ' + log.join(' | ');
-    </script>
-    """.replace("__COOKIE__", cookie).replace("__NAME__", COOKIE_NAME)
-    components.html(script, height=50)
+    # token chỉ gồm ký tự A-Z a-z 0-9 - _ nên chèn thẳng vào chuỗi JS là an toàn
+    components.html(
+        f"""<script>
+        const p = window.parent;
+        const secure = p.location.protocol === 'https:' ? '; Secure' : '';
+        p.document.cookie = "{COOKIE_NAME}={value}; max-age={max_age}; path=/; SameSite=Lax" + secure;
+        </script>""",
+        height=0,
+    )
 
 
 # ---------------------------------------------------------------------------
