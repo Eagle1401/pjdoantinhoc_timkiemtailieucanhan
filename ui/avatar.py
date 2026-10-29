@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 import html
 import streamlit as st
+import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from config import data_dir
@@ -94,55 +95,99 @@ def avatar_image(user: str) -> bytes:
 # ---------------------------------------------------------------------------
 # Giao diện
 # ---------------------------------------------------------------------------
-def _render_change_form(user: str) -> None:
-    with st.sidebar.expander("🖼️ Đổi ảnh đại diện"):
-        with st.form("avatar_form", clear_on_submit=True):
-            file = st.file_uploader("Chọn ảnh", type=["png", "jpg", "jpeg", "webp"])
-            submitted = st.form_submit_button("Lưu ảnh đại diện", use_container_width=True)
-        if submitted:
-            if file is None:
-                st.warning("Bạn chưa chọn ảnh.")
-            elif file.size > MAX_UPLOAD_MB * 1024 * 1024:
-                st.error(f"Ảnh vượt quá {MAX_UPLOAD_MB} MB.")
-            else:
-                try:
-                    save_avatar(user, file)
-                except Exception as e:
-                    st.error(f"Không đọc được ảnh: {type(e).__name__}")
-                else:
-                    st.toast("Đã cập nhật ảnh đại diện!", icon="✅")
-                    st.rerun()
-        if avatar_path(user).exists() and st.button("Xóa ảnh, dùng chữ cái đầu", key="avatar_del"):
-            delete_avatar(user)
-            st.toast("Đã xóa ảnh đại diện.", icon="🗑️")
-            st.rerun()
-
-
 ENLARGED_PX = 220            # kích thước avatar khi phóng to
 
 
-def _render_enlarged(user: str) -> None:
-    """Nội dung hiện ra khi nhấp: avatar lớn ở giữa và tên người dùng."""
+def _render_change_form(user: str) -> None:
+    """Form đổi/xóa ảnh đại diện (đặt trong khung thông tin)."""
+    with st.form("avatar_form", clear_on_submit=True):
+        file = st.file_uploader("Đổi ảnh đại diện", type=["png", "jpg", "jpeg", "webp"])
+        submitted = st.form_submit_button("Lưu ảnh đại diện", use_container_width=True)
+    if submitted:
+        if file is None:
+            st.warning("Bạn chưa chọn ảnh.")
+        elif file.size > MAX_UPLOAD_MB * 1024 * 1024:
+            st.error(f"Ảnh vượt quá {MAX_UPLOAD_MB} MB.")
+        else:
+            try:
+                save_avatar(user, file)
+            except Exception as e:
+                st.error(f"Không đọc được ảnh: {type(e).__name__}")
+            else:
+                st.toast("Đã cập nhật ảnh đại diện!", icon="✅")
+                st.rerun()
+    if avatar_path(user).exists() and st.button("Xóa ảnh, dùng chữ cái đầu", key="avatar_del"):
+        delete_avatar(user)
+        st.toast("Đã xóa ảnh đại diện.", icon="🗑️")
+        st.rerun()
+
+
+def _render_profile(user: str) -> None:
+    """Nội dung khung thông tin: avatar lớn, tên người dùng và tùy chọn đổi ảnh."""
     _, center, _ = st.columns([1, 3, 1])
     with center:
         st.image(avatar_image(user), width=ENLARGED_PX)
-    st.markdown(f"<div style='text-align:center'><b>{html.escape(user)}</b></div>",
-                unsafe_allow_html=True)
+    st.markdown(f"**{user}**")
+    st.divider()
+    _render_change_form(user)
+
+AVATAR_KEY = "user_avatar"       # tạo class CSS st-key-user_avatar để gắn style ổn định
+
+
+def _avatar_css(user: str) -> str:
+    """CSS biến nút popover thành hình tròn mang ảnh avatar (nhúng ảnh dạng data URI)."""
+    b64 = base64.b64encode(avatar_image(user)).decode()
+    d = AVATAR_RADIUS_CM * 2
+    btn = f'.st-key-{AVATAR_KEY} [data-testid="stPopoverButton"]'
+    return f"""<style>
+{btn} {{
+    width: {d}cm; height: {d}cm; min-height: 0; padding: 0;
+    border-radius: 50%; overflow: hidden;
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    background: url(data:image/png;base64,{b64}) center / cover no-repeat;
+    font-size: 0; color: transparent;
+}}
+{btn} * {{ display: none; }}                  /* ẩn nhãn và mũi tên mặc định */
+{btn}:hover {{ filter: brightness(1.15); border-color: #888; }}
+</style>"""
+
+
+AVATAR_KEY = "user_avatar"       # tạo class CSS st-key-user_avatar để gắn style ổn định
+
+
+def _avatar_css(user: str) -> str:
+    """CSS biến nút popover thành hình tròn mang ảnh avatar (nhúng ảnh dạng data URI)."""
+    b64 = base64.b64encode(avatar_image(user)).decode()
+    d = AVATAR_RADIUS_CM * 2
+    btn = f'.st-key-{AVATAR_KEY} [data-testid="stPopoverButton"]'
+    return f"""<style>
+{btn} {{
+    width: {d}cm; height: {d}cm; min-height: 0; padding: 0;
+    border-radius: 50%; overflow: hidden;
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    background: url(data:image/png;base64,{b64}) center / cover no-repeat;
+    font-size: 0; color: transparent;
+}}
+{btn} * {{ display: none; }}                  /* ẩn nhãn và mũi tên mặc định */
+{btn}:hover {{ filter: brightness(1.15); border-color: #888; }}
+</style>"""
 
 
 def render_user_avatar(user: str) -> None:
-    """Avatar tròn kèm tên bên cạnh; nhấp vào tên để xem avatar phóng to, và mục đổi ảnh."""
+    """Chỉ hiện avatar tròn; nhấp vào avatar để xem thông tin và đổi ảnh."""
     with st.sidebar:
         try:
-            col_img, col_name = st.columns([1, 4], vertical_alignment="center")
-        except TypeError:                     # Streamlit cũ không có vertical_alignment
-            col_img, col_name = st.columns([1, 4])
-        with col_img:
-            st.image(avatar_image(user), width=AVATAR_PX)
-        with col_name:
-            try:
-                with st.popover(user, use_container_width=True):
-                    _render_enlarged(user)
-            except AttributeError:            # Streamlit cũ không có st.popover
-                st.markdown(f"**{user}**")
-    _render_change_form(user)
+            box = st.container(key=AVATAR_KEY)
+        except TypeError:                     # Streamlit cũ không hỗ trợ key cho container
+            box = None
+        if box is None:                       # phương án dự phòng: nút ▾ cạnh avatar
+            col_img, col_btn = st.columns([1, 5])
+            col_img.image(avatar_image(user), width=AVATAR_PX)
+            with col_btn:
+                with st.popover("▾"):
+                    _render_profile(user)
+            return
+        st.markdown(_avatar_css(user), unsafe_allow_html=True)
+        with box:
+            with st.popover("👤"):            # nhãn bị CSS ẩn; nếu CSS không áp dụng thì hiện 👤
+                _render_profile(user)
