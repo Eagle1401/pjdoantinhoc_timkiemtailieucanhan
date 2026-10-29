@@ -5,7 +5,12 @@ import storage
 from config import ensure_dirs
 from search import filter_documents, get_all_tags
 from ui.document_list import render_document_list
-from ui.login import current_user, render_login_page, render_user_box
+from ui.login import (
+    current_user,
+    flush_cookie_actions,
+    render_login_page,
+    render_user_box,
+)
 from ui.sidebar import render_sidebar
 
 st.set_page_config(
@@ -14,7 +19,8 @@ st.set_page_config(
 
 
 def main() -> None:
-    user = current_user()
+    flush_cookie_actions()            # ghi/xóa cookie đăng nhập nếu có yêu cầu từ lần chạy trước
+    user = current_user()             # lấy từ session hoặc khôi phục từ cookie
     if not user:                      # chưa đăng nhập -> chỉ hiện trang đăng nhập
         render_login_page()
         return

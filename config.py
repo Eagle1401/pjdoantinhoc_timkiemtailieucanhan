@@ -5,6 +5,7 @@ META_ROOT = Path("metadata")        # metadata/<username>/*.json
 DATA_ROOT = Path("raw_documents")   # raw_documents/<username>/<file>
 USERS_DIR = Path("users")
 USERS_FILE = USERS_DIR / "users.json"
+SESSIONS_FILE = USERS_DIR / "sessions.json"
 
 
 def meta_dir(user: str) -> Path:
