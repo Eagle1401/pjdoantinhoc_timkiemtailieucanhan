@@ -18,7 +18,7 @@ def render_add_form(user: str) -> None:
     st.sidebar.markdown("---")
     st.sidebar.subheader("➕ Thêm tài liệu mới")
     with st.sidebar.form("add_doc_form", clear_on_submit=True):
-        title = st.text_input("Tiêu đề tài liệu *")
+        title = st.text_input("Tiêu đề tài liệu * (chỉ dùng khi không chọn file hoặc chọn 1 file)")
         author = st.text_input("Tác giả")
         tags = st.text_input("Tags (cách nhau bởi dấu phẩy)")
         uploaded_files = st.file_uploader(
@@ -29,7 +29,7 @@ def render_add_form(user: str) -> None:
     if not submitted:
         return
 
-    # Không có file: tạo một tài liệu chỉ có thông tin (như trước)
+    # Không có file: tạo một tài liệu chỉ có thông tin
     if not uploaded_files:
         if not title.strip():
             st.sidebar.warning("Vui lòng nhập tiêu đề tài liệu!")
@@ -41,15 +41,18 @@ def render_add_form(user: str) -> None:
             return
         st.toast("Đã lưu tài liệu thành công!", icon="✅")
         st.rerun()
+        return
 
     # Có file: mỗi file thành một tài liệu
     ok, failed = 0, []
+    many = len(uploaded_files) > 1
+    if many and title.strip():
+        st.sidebar.info("Chọn nhiều file: mỗi tài liệu lấy tên file làm tiêu đề, ô Tiêu đề được bỏ qua.")
+
     progress = st.sidebar.progress(0.0)
     for i, f in enumerate(uploaded_files, start=1):
-        if len(uploaded_files) > 1 and title.strip():
-            st.sidebar.info("Chọn nhiều file: mỗi tài liệu lấy tên file làm tiêu đề, ô Tiêu đề được bỏ qua.")     # 1 file + có nhập tiêu đề: dùng tiêu đề đó
-        else:
-            doc_title = Path(f.name).stem      # còn lại: lấy theo tên file
+        # Một file và có nhập tiêu đề: dùng tiêu đề đó; còn lại lấy theo tên file
+        doc_title = title.strip() if (not many and title.strip()) else Path(f.name).stem
         try:
             storage.create_document(user, doc_title, author, tags, f)
             ok += 1
