@@ -2,7 +2,7 @@
 import html
 from pathlib import Path
 from typing import List, Optional
-
+import base64
 import streamlit as st
 
 import storage
@@ -49,7 +49,23 @@ FOUND_CSS = (
 PREVIEW_CSS = """<style>
 video { max-width: 520px; border-radius: 0.5rem; }
 [data-testid="stImage"] img { border-radius: 0.5rem; }
+
+.doc-card h3 { margin: 0 0 0.35rem; font-size: 1.3rem; line-height: 1.3; }
+.doc-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-bottom: 0.5rem; opacity: 0.9; }
+.doc-tags { margin-bottom: 0.5rem; }
+.doc-tags code { margin-right: 0.3rem; }
+.doc-notes { margin: 0.5rem 0; padding: 0.3rem 0.9rem; border-left: 3px solid rgba(128,128,128,0.5); opacity: 0.9; }
+
+/* khung xem trước: đứng 3:4, ngang 4:3 */
+.doc-thumb { position: relative; margin: 0.5rem 0; overflow: hidden; border-radius: 0.5rem; background: #000; max-width: 100%; }
+.doc-thumb.portrait  { width: 240px; aspect-ratio: 3 / 4; }
+.doc-thumb.landscape { width: 320px; aspect-ratio: 4 / 3; }
+.doc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.doc-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 3rem; height: 3rem; border-radius: 50%; background: rgba(0,0,0,0.6);
+            color: #fff; display: grid; place-items: center; font-size: 1.1rem; }
 </style>"""
+
 
 PREPARED_KEY = "prepared_download"   # id tài liệu đang được chuẩn bị tải
 
@@ -93,38 +109,67 @@ def _toggle_button(label_on: str, label_off: str, state_key: str, btn_key: str) 
     return on
 
 
+@st.cache_data(show_spinner=False)
+def _data_uri(path_str: str, mtime: float) -> str:
+    """Nhúng ảnh xem trước (JPEG nhỏ) vào HTML; mtime để làm mới khi file đổi."""
+    return "data:image/jpeg;base64," + base64.b64encode(Path(path_str).read_bytes()).decode()
+
+
+def _thumb_html(thumb: Path, doc: dict, is_video: bool) -> str:
+    orient = "landscape" if doc.get("orientation") == "landscape" else "portrait"
+    src = _data_uri(str(thumb), thumb.stat().st_mtime)
+    play = '<span class="doc-play">▶</span>' if is_video else ""
+    return (f'<figure class="doc-thumb {orient}">'
+            f'<img src="{src}" alt="{html.escape(doc["title"])}">{play}</figure>')
+
+
+def _info_html(doc: dict, keyword: str, selected_tags: List[str]) -> str:
+    parts = [
+        '<div class="doc-card">',
+        f'<h3>📄 {highlight(doc["title"], keyword)}</h3>',
+        '<div class="doc-meta">'
+        f'<span><b>Tác giả:</b> {highlight(doc["author"], keyword)}</span>'
+        f'<span><b>Nguồn:</b> {html.escape(doc["source"])}</span></div>',
+    ]
+    if doc["tags"]:
+        tags = " ".join(_tag_html(t, keyword, selected_tags) for t in doc["tags"])
+        parts.append(f'<div class="doc-tags"><b>Tags:</b> {tags}</div>')
+    if doc["notes"]:
+        notes = highlight(doc["notes"], keyword).replace("\n", "<br>")
+        parts.append(f'<blockquote class="doc-notes"><b>Ghi chú cá nhân:</b> {notes}</blockquote>')
+    parts.append("</div>")
+    return "".join(parts)          # một dòng liền, không có dòng trống để Markdown không làm vỡ HTML
+
+
 def _render_preview(user: str, file_path: Path, doc: dict) -> None:
-    """Ảnh: ảnh xem trước 3:4/4:3, bấm để xem ảnh lớn. Video: ảnh bìa giây đầu, bấm để phát."""
     kind = thumbs.kind_of(storage.original_filename(doc))
     if kind is None:
         return
     try:
-        thumb = storage.ensure_thumbnail(user, doc)    # tài liệu cũ chưa có thì tạo một lần
-        width = thumbs.size_for(doc.get("orientation"))[0]
+        thumb = storage.ensure_thumbnail(user, doc)
         doc_id = doc["id"]
 
         if kind == "image":
             if _toggle_button("🔍 Xem ảnh lớn", "✖️ Thu nhỏ", f"big_{doc_id}", f"bigbtn_{doc_id}"):
                 st.image(str(file_path), caption=doc["title"])
             elif thumb:
-                st.image(str(thumb), caption=doc["title"], width=width)
+                st.markdown(_thumb_html(thumb, doc, False), unsafe_allow_html=True)
             else:
-                st.image(str(file_path), caption=doc["title"], width=width)
+                st.image(str(file_path), caption=doc["title"], width=240)
             return
 
-        # Video
         if st.session_state.get(f"play_{doc_id}"):
             st.video(str(file_path))
             if st.button("⏹️ Đóng video", key=f"stop_{doc_id}"):
                 st.session_state[f"play_{doc_id}"] = False
                 st.rerun()
         elif thumb:
-            st.image(str(thumb), caption=doc["title"], width=width)
+            st.markdown(_thumb_html(thumb, doc, True), unsafe_allow_html=True)
             if st.button("▶️ Phát video", key=f"play_btn_{doc_id}"):
                 st.session_state[f"play_{doc_id}"] = True
                 st.rerun()
         else:
-            st.video(str(file_path))                   # không tạo được ảnh bìa: dùng trình phát luôn
+            st.video(str(file_path))
     except Exception as e:
         st.caption(f"⚠️ Không thể xem trước file này ({type(e).__name__}: {e})")
 
@@ -147,18 +192,7 @@ def _render_download(file_path: Path, doc: dict) -> None:
 
 
 def _render_info(user: str, doc: dict, keyword: str, selected_tags: List[str]) -> None:
-    st.markdown(f"### 📄 {highlight(doc['title'], keyword)}", unsafe_allow_html=True)
-    st.markdown(
-        f"**Tác giả:** {highlight(doc['author'], keyword)} | "
-        f"**Nguồn:** {html.escape(doc['source'])}",
-        unsafe_allow_html=True,
-    )
-    if doc["tags"]:
-        tags_html = " ".join(_tag_html(t, keyword, selected_tags) for t in doc["tags"])
-        st.markdown(f"**Tags:** {tags_html}", unsafe_allow_html=True)
-    if doc["notes"]:
-        notes_html = highlight(doc["notes"], keyword).replace("\n", "<br>")
-        st.markdown(f"> 📝 **Ghi chú cá nhân:** {notes_html}", unsafe_allow_html=True)
+    st.markdown(_info_html(doc, keyword, selected_tags), unsafe_allow_html=True)
 
     file_path = storage.get_file_path(user, doc)
     if file_path:
