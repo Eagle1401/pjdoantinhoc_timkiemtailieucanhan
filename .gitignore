@@ -1,3 +1,8 @@
 __pycache__/
 .venv/
 venv/
+users/
+metadata/
+raw_documents/
+sessions.json
+.secret_key
