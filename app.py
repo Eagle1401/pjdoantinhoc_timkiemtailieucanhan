@@ -9,7 +9,7 @@ from ui.login import current_user, render_login_page, render_user_box
 from ui.sidebar import render_sidebar
 
 st.set_page_config(
-    page_title="Đồ án Quản lý & Tìm kiếm Tài liệu Cá nhân", layout="wide"
+    page_title="Quản lý & Tìm kiếm Tài liệu Cá nhân", layout="wide"
 )
 
 
