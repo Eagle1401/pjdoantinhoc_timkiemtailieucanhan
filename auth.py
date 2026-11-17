@@ -109,7 +109,14 @@ def _hash_token(token: str) -> str:
 
 def _prune_expired(sessions: dict) -> dict:
     now = time.time()
-    return {k: v for k, v in sessions.items() if v.get("expires", 0) > now}
+
+    result = {}
+
+    for k, v in sessions.items():
+        if v.get("expires", 0) > now:
+            result[k] = v
+
+    return result
 
 
 def create_session(username: str, days: int = SESSION_DAYS) -> str:
